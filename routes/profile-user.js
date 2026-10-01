@@ -5,48 +5,66 @@ export const method = "get";
 export const name = "/user/:id";
 
 export const execute = async (req, res) => {
- const { id } = req.params;
+  const { id } = req.params;
 
- const tokens = [
-    "MTExMjg1Nzg2NzIyMTk5MTQ5NA.GECDOO.jaDzlgJmtenPX5eC54FRuaYRXuE9zZt7LJ-0yY",
-    "",
-    ""
-];
+  const tokens = [
+    process.env.DISCORD_TOKEN_1,
+    process.env.DISCORD_TOKEN_2,
+    process.env.DISCORD_TOKEN_3
+  ].filter(Boolean);
 
- const getUsers = async () => {
-  let response = null;
+  const getUsers = async () => {
+    let response = null;
 
-  for (const token of tokens) {
-   try {
-    response = await fetch(`https://canary.discord.com/api/v10/users/${id}/profile`, {
-     headers: { Authorization: token },
-    }).then((res) => res.json());
+    for (const token of tokens) {
+      try {
+        const discordResponse = await fetch(
+          `https://canary.discord.com/api/v10/users/${id}/profile`,
+          {
+            headers: {
+              Authorization: token
+            }
+          }
+        );
 
-    if (response && !response.message) {
-     break;
+        response = await discordResponse.json();
+
+        if (response && !response.message) {
+          break;
+        }
+      } catch (error) {
+        console.error("Erro ao consultar Discord:", error);
+      }
     }
-   } catch (e) {
-    console.error(e);
-   }
-  }
 
-  const target = await client.users?.fetch(id).catch(() => null);
-  if (!target) {
-   return res.status(400).json({ status: 400, message: "Coloque um id de usuário válido." });
-  }
+    const target = await client.users?.fetch(id).catch(() => null);
 
-  if (!response) {
-   return res.status(500).json({ status: 500, message: "Erro ao obter o perfil do usuário." });
-  }
+    if (!target) {
+      return res.status(400).json({
+        status: 400,
+        message: "Coloque um id de usuário válido."
+      });
+    }
 
-  try {
-   const userResponse = await getUserResponse(response);
-   return res.json(userResponse);
-  } catch (error) {
-   console.error(e);
-   return res.status(500).json({ status: 500, message: "Erro ao processar a resposta do usuário." });
-  }
- };
+    if (!response || response.message) {
+      return res.status(500).json({
+        status: 500,
+        message: "Erro ao obter o perfil do usuário."
+      });
+    }
 
- await getUsers();
+    try {
+      const userResponse = await getUserResponse(response);
+      return res.json(userResponse);
+    } catch (error) {
+      console.error("Erro ao processar resposta:", error);
+
+      return res.status(500).json({
+        status: 500,
+        message: "Erro ao processar a resposta do usuário."
+      });
+    }
+  };
+
+  await getUsers();
 };
