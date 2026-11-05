@@ -1,3 +1,4 @@
+
 import { client } from "../index.js";
 import { getUserResponse } from "../controllers/usersController.js";
 
@@ -7,64 +8,89 @@ export const name = "/user/:id";
 export const execute = async (req, res) => {
   const { id } = req.params;
 
-  const tokens = [
-    process.env.DISCORD_TOKEN_1,
-    process.env.DISCORD_TOKEN_2,
-    process.env.DISCORD_TOKEN_3
-  ].filter(Boolean);
+  if (!/^\d{17,20}$/.test(id)) {
+    return res.status(400).json({
+      status: 400,
+      message: "ID do Discord inválido."
+    });
+  }
 
-  const getUsers = async () => {
+  try {
+    const tokens = [
+      process.env.DISCORD_TOKEN_1,
+      process.env.DISCORD_TOKEN_2,
+      process.env.DISCORD_TOKEN_3
+    ].filter(Boolean);
+
+    console.log("[PROFILE] ID:", id);
+    console.log("[PROFILE] Tokens disponíveis:", tokens.length);
+
     let response = null;
 
-    for (const token of tokens) {
+    for (let i = 0; i < tokens.length; i++) {
       try {
         const discordResponse = await fetch(
           `https://canary.discord.com/api/v10/users/${id}/profile`,
           {
             headers: {
-              Authorization: token
+              Authorization: tokens[i]
             }
           }
         );
 
-        response = await discordResponse.json();
+        const body = await discordResponse.text();
 
-        if (response && !response.message) {
-          break;
+        console.log(
+          `[PROFILE] Token ${i + 1} HTTP:`,
+          discordResponse.status
+        );
+
+        if (!discordResponse.ok) {
+          console.error(
+            `[PROFILE] Resposta Discord ${i + 1}:`,
+            body.slice(0, 1000)
+          );
+          continue;
         }
+
+        response = JSON.parse(body);
+        break;
+
       } catch (error) {
-        console.error("Erro ao consultar Discord:", error);
+        console.error(
+          `[PROFILE] Erro token ${i + 1}:`,
+          error.message
+        );
       }
     }
 
-    const target = await client.users?.fetch(id).catch(() => null);
-
-    if (!target) {
-      return res.status(400).json({
-        status: 400,
-        message: "Coloque um id de usuário válido."
+    if (!response) {
+      return res.status(502).json({
+        status: 502,
+        message: "Não foi possível obter o perfil do Discord."
       });
     }
 
-    if (!response || response.message) {
-      return res.status(500).json({
-        status: 500,
-        message: "Erro ao obter o perfil do usuário."
+    if (!response.user?.id) {
+      console.error("[PROFILE] Estrutura inesperada:", JSON.stringify(response).slice(0, 1000));
+
+      return res.status(502).json({
+        status: 502,
+        message: "O Discord retornou uma resposta inesperada."
       });
     }
 
-    try {
-      const userResponse = await getUserResponse(response);
-      return res.json(userResponse);
-    } catch (error) {
-      console.error("Erro ao processar resposta:", error);
+    const userResponse = await getUserResponse(response);
 
-      return res.status(500).json({
-        status: 500,
-        message: "Erro ao processar a resposta do usuário."
-      });
-    }
-  };
+    return res.json(userResponse);
 
-  await getUsers();
+  } catch (error) {
+    console.error("[PROFILE] Erro geral:", error);
+
+    return res.status(500).json({
+      status: 500,
+      message: "Erro ao processar o perfil.",
+      error: error.message
+    });
+  }
 };
